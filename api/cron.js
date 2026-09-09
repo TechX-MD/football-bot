@@ -3,14 +3,19 @@ const { checkLiveMatches } = require('../src/services/matchTracker');
 
 module.exports = async (req, res) => {
   try {
-    const summary = await checkLiveMatches();
+    // Check 1 pakarepo
+    const check1 = await checkLiveMatches();
+
+    // Mira masekonzi 4 woita Check 2 mukati me request imwe chete
+    await new Promise(r => setTimeout(r, 4000));
+    const check2 = await checkLiveMatches();
+
     return res.status(200).json({
       success: true,
-      message: "Cron live check executed successfully",
-      summary
+      message: "Double high-speed check completed",
+      alerts: (check1.alertsSent || 0) + (check2.alertsSent || 0)
     });
   } catch (err) {
-    console.error('Cron execution error:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 };

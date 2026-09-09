@@ -4,7 +4,6 @@ const { ESPN_LEAGUES } = require('../config/leagues');
 const { sendTelegramAlert } = require('./telegramService');
 const { getOfficialLineupForAlert } = require('./lineupService');
 
-// Faira re Cache riri mu /tmp storage ye Vercel
 const CACHE_FILE = path.join('/tmp', 'football_bot_cache.json');
 
 function loadCache() {
@@ -12,18 +11,14 @@ function loadCache() {
     if (fs.existsSync(CACHE_FILE)) {
       return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
     }
-  } catch (e) {
-    console.error("Cache read error:", e.message);
-  }
+  } catch (e) {}
   return { matches: {}, postedLineups: [] };
 }
 
 function saveCache(cache) {
   try {
     fs.writeFileSync(CACHE_FILE, JSON.stringify(cache), 'utf8');
-  } catch (e) {
-    console.error("Cache write error:", e.message);
-  }
+  } catch (e) {}
 }
 
 async function checkLiveMatches() {
@@ -31,11 +26,18 @@ async function checkLiveMatches() {
   let liveCount = 0;
   let alertsSent = 0;
 
-  for (const league of ESPN_LEAGUES) {
+  // Ultra-Fast: Tarisa ma leagues ese ari 9 kamwe chete (Parallel)
+  const leaguePromises = ESPN_LEAGUES.map(async (league) => {
     try {
-      const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${league.code}/scoreboard`;
-      const res = await fetch(url);
-      if (!res.ok) continue;
+      // _ts inobvisa cache ye ESPN kuti tiwane goal pakarepo richangonwika
+      const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${league.code}/scoreboard?_ts=${Date.now()}`;
+      const res = await fetch(url, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
+      if (!res.ok) return;
 
       const data = await res.json();
       const events = data.events || [];
@@ -46,9 +48,10 @@ async function checkLiveMatches() {
         if (ev.status?.type?.state === 'in') liveCount++;
       }
     } catch (e) {}
-  }
+  });
 
-  // Chengetedza mascores matsva mu /tmp
+  await Promise.allSettled(leaguePromises);
+
   saveCache(cache);
   return { liveMatches: liveCount, alertsSent };
 }
@@ -67,13 +70,11 @@ async function processMatch(league, ev, cache) {
   const hScore = parseInt(home.score || '0', 10);
   const aScore = parseInt(away.score || '0', 10);
 
-  const state = ev.status?.type?.state; // 'pre', 'in', 'post'
+  const state = ev.status?.type?.state;
   const detail = (ev.status?.type?.detail || '').toLowerCase();
   const shortDetail = (ev.status?.type?.shortDetail || '').toLowerCase();
 
-  // ====================================================
-  // 1. AUTO-LINEUP ALERT (30-40 MINS TO KICKOFF)
-  // ====================================================
+  // 1. AUTO-LINEUP ALERT (30 MINS TO KICKOFF)
   if (state === 'pre' && !cache.postedLineups.includes(matchId)) {
     try {
       const kickoffTime = new Date(ev.date).getTime();
@@ -90,7 +91,7 @@ async function processMatch(league, ev, cache) {
     } catch (err) {}
   }
 
-  // KEKUTANGA MUTAMBO KUONEKWA (FIRST DISCOVERY)
+  // FIRST SEEN: Chengeta mascores aripo pasina alert
   if (!cache.matches[matchId]) {
     cache.matches[matchId] = {
       state,
@@ -99,15 +100,13 @@ async function processMatch(league, ev, cache) {
       homeScore: hScore,
       awayScore: aScore
     };
-    return false; // Chengeta pasina kutumira ma alerts enhema
+    return false;
   }
 
   const prev = cache.matches[matchId];
   let sentAlert = false;
 
-  // ====================================================
   // 2. KICK-OFF ALERT
-  // ====================================================
   if (prev.state === 'pre' && state === 'in') {
     await sendTelegramAlert(null,
       `🟢 <b>KICK-OFF! MATCH STARTED</b>\n` +
@@ -119,12 +118,12 @@ async function processMatch(league, ev, cache) {
     sentAlert = true;
   }
 
-  // ====================================================
-  // 3. REAL GOAL ALERT
-  // ====================================================
+  // 3. INSTANT GOAL ALERT (HIGH SPEED)
   if (state === 'in') {
     if (hScore > prev.homeScore || aScore > prev.awayScore) {
-      const scorerInfo = await fetchLatestScorer(league.code, matchId);
+      // Tora munhu we goal nekukasika (max 1.5 seconds) kuti tisasare shure
+      const scorerInfo = await fetchLatestScorerFast(league.code, matchId);
+
       await sendTelegramAlert(null,
         `⚽ <b>GOOOOOOOAL!</b>\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
@@ -136,7 +135,7 @@ async function processMatch(league, ev, cache) {
       sentAlert = true;
     }
 
-    // 4. VAR DISALLOWED GOAL (ROLLBACK)
+    // 4. VAR DISALLOWED GOAL
     if (hScore < prev.homeScore || aScore < prev.awayScore) {
       await sendTelegramAlert(null,
         `🚫 <b>GOAL DISALLOWED / VAR OVERTURNED!</b>\n` +
@@ -149,9 +148,7 @@ async function processMatch(league, ev, cache) {
     }
   }
 
-  // ====================================================
   // 5. HALF TIME & SECOND HALF
-  // ====================================================
   const isHTNow = detail.includes('half time') || shortDetail === 'ht' || detail === 'ht';
   const wasHT = (prev.detail || '').includes('half time') || prev.shortDetail === 'ht';
 
@@ -175,9 +172,7 @@ async function processMatch(league, ev, cache) {
     sentAlert = true;
   }
 
-  // ====================================================
   // 6. FULL TIME / MATCH ENDED
-  // ====================================================
   if (prev.state === 'in' && state === 'post') {
     await sendTelegramAlert(null,
       `🏁 <b>FULL TIME / MATCH ENDED</b>\n` +
@@ -189,7 +184,6 @@ async function processMatch(league, ev, cache) {
     sentAlert = true;
   }
 
-  // Gadziridza cache yacho
   cache.matches[matchId] = {
     state,
     detail,
@@ -201,10 +195,15 @@ async function processMatch(league, ev, cache) {
   return sentAlert;
 }
 
-async function fetchLatestScorer(leagueCode, matchId) {
+async function fetchLatestScorerFast(leagueCode, matchId) {
   try {
-    const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueCode}/summary?event=${matchId}`;
-    const res = await fetch(url);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1800); // 1.8s timeout chete
+
+    const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueCode}/summary?event=${matchId}&_ts=${Date.now()}`;
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
     if (!res.ok) return "🎯 Goal scored!";
     const data = await res.json();
     const keyEvents = data.keyEvents || [];
