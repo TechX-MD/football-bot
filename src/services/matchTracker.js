@@ -1,15 +1,15 @@
 const { ESPN_LEAGUES } = require('../config/leagues');
 const { sendTelegramAlert } = require('./telegramService');
+const { getOfficialLineupForAlert } = require('./lineupService');
 
-// State memory
 const matchCache = new Map();
 const processedEvents = new Set();
-let isInitialized = false; // Cold start guard — hapana alert inobuda bot richangotanga
+const postedLineups = new Set(); // Inochengeta mitambo yatoiswa lineup mu Channel
+let isInitialized = false;
 
 async function checkLiveMatches() {
   for (const league of ESPN_LEAGUES) {
     try {
-      // Scoreboard endpoint rinopa state chaiyo yemutambo
       const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${league.code}/scoreboard`;
       const res = await fetch(url);
       if (!res.ok) continue;
@@ -20,15 +20,12 @@ async function checkLiveMatches() {
       for (const ev of events) {
         await processMatch(league, ev);
       }
-    } catch (e) {
-      // Nyarara kana paine network blip
-    }
+    } catch (e) {}
   }
 
-  // Kana mapedza kuverenga kekutanga, vhura alerts dze live
   if (!isInitialized) {
     isInitialized = true;
-    console.log("⚡ [REAL-TIME ENGINE] Live tracker yagadzirira. Alerts dzichangopinda pazvibodzwa zvitsva chete!");
+    console.log("⚡ [REAL-TIME ENGINE] Live tracker & 30-min Auto Lineup engine active.");
   }
 }
 
@@ -50,74 +47,80 @@ async function processMatch(league, ev) {
   const detail = (ev.status?.type?.detail || '').toLowerCase();
   const shortDetail = (ev.status?.type?.shortDetail || '').toLowerCase();
 
-  // KEKUTANGA: Chengeta data remutambo pasina kutumira ma alerts enhema
+  // ==========================================
+  // AUTO-LINEUP ALERT: PASARA 30-40 MINS BHORA RISATI RATANGA
+  // ==========================================
+  if (state === 'pre' && !postedLineups.has(matchId)) {
+    try {
+      const kickoffTime = new Date(ev.date).getTime();
+      const now = Date.now();
+      const diffMins = (kickoffTime - now) / (1000 * 60);
+
+      // Kana pasara pakati pe 10 kusvika 45 minutes bhora risati ratanga
+      if (diffMins <= 45 && diffMins >= 10) {
+        const lineupText = await getOfficialLineupForAlert(league.code, matchId);
+        if (lineupText) {
+          await sendTelegramAlert(null, lineupText);
+          postedLineups.add(matchId);
+          console.log(`✅ [AUTO-LINEUP POSTED]: ${homeName} vs ${awayName} (${Math.round(diffMins)} mins to kickoff)`);
+        }
+      }
+    } catch (err) {}
+  }
+
   if (!matchCache.has(matchId)) {
     matchCache.set(matchId, {
       state,
       detail,
+      shortDetail,
       homeScore: hScore,
       awayScore: aScore,
-      period: ev.status?.period || 0,
       shootoutHome: home.shootoutScore || 0,
       shootoutAway: away.shootoutScore || 0
     });
-
-    // Kana riri bhora riripo kare, isa zviitiko zvaro mu cache pasina ku alert
-    if (!isInitialized) {
-      return;
-    }
+    if (!isInitialized) return;
   }
 
   const prev = matchCache.get(matchId);
 
-  // ==========================================
-  // 1. KICK OFF (MUTAMBO WACHANGA KUTANGA CHAIWO)
-  // ==========================================
+  // 1. KICK-OFF ALERT
   if (prev.state === 'pre' && state === 'in' && isInitialized) {
     await sendTelegramAlert(null,
       `🟢 <b>KICK-OFF! MATCH STARTED</b>\n` +
       `━━━━━━━━━━━━━━━━━━━\n` +
       `🏆 <b>${league.name}</b>\n\n` +
       `⚽ <b>${homeName}</b> 0 - 0 <b>${awayName}</b>\n\n` +
-      `Mutambo uri kutambwa zviri pamutemo!`
+      `The match is officially underway!`
     );
   }
 
-  // ==========================================
-  // 2. REAL GOAL NOTIFICATION (PANO CHINWIRWA)
-  // ==========================================
+  // 2. REAL GOAL ALERT
   if (state === 'in' && isInitialized) {
     if (hScore > prev.homeScore || aScore > prev.awayScore) {
-      // Goal ranyatsopinda! Tsvaga scorer pakarepo
-      const scorerInfo = await fetchLatestScorer(league.code, matchId, hScore, aScore, homeName, awayName);
-
+      const scorerInfo = await fetchLatestScorer(league.code, matchId);
       await sendTelegramAlert(null,
-        `⚽ <b>GOOOOOOOAL!!!</b>\n` +
+        `⚽ <b>GOOOOOOOAL!</b>\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
         `🏆 <b>${league.name}</b>\n\n` +
         `🔵 <b>${homeName}</b>  ${hScore} - ${aScore}  <b>${awayName}</b> 🔴\n\n` +
         `${scorerInfo}\n` +
-        `⏱️ Nguva: <b>${ev.status?.type?.shortDetail || 'LIVE 🔴'}</b>`
+        `⏱️ Clock: <b>${ev.status?.type?.shortDetail || 'LIVE 🔴'}</b>`
       );
     }
 
-    // ==========================================
-    // 3. VAR DISALLOWED GOAL (SCORE ROLLBACK)
-    // ==========================================
+    // 3. VAR DISALLOWED GOAL
     if (hScore < prev.homeScore || aScore < prev.awayScore) {
       await sendTelegramAlert(null,
-        `🚫 <b>GOAL DISALLOWED / VAR OVERTURN!</b>\n` +
+        `🚫 <b>GOAL DISALLOWED / VAR OVERTURNED!</b>\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
         `🏆 <b>${league.name}</b>\n\n` +
-        `❌ Chibodzwa charambwa zvichitevera kuongororwa ne VAR!\n\n` +
-        `Score yadzokera pa: <b>${homeName} ${hScore} - ${aScore} ${awayName}</b>`
+        `❌ Goal ruled out following a VAR check!\n\n` +
+        `Score returned to: <b>${homeName} ${hScore} - ${aScore} ${awayName}</b>`
       );
     }
   }
 
-  // ==========================================
-  // 4. HALFTIME & 2ND HALF (START & END)
-  // ==========================================
+  // 4. HALF TIME & SECOND HALF
   if (isInitialized) {
     const isHTNow = detail.includes('half time') || shortDetail === 'ht' || detail === 'ht';
     const wasHT = prev.detail.includes('half time') || prev.shortDetail === 'ht' || prev.detail === 'ht';
@@ -128,7 +131,7 @@ async function processMatch(league, ev) {
         `━━━━━━━━━━━━━━━━━━━\n` +
         `🏆 <b>${league.name}</b>\n\n` +
         `🔵 <b>${homeName}</b>  ${hScore} - ${aScore}  <b>${awayName}</b> 🔴\n\n` +
-        `Chikamu chekutanga chapera!`
+        `The first half has ended!`
       );
     } else if (!isHTNow && wasHT && state === 'in') {
       await sendTelegramAlert(null,
@@ -136,91 +139,39 @@ async function processMatch(league, ev) {
         `━━━━━━━━━━━━━━━━━━━\n` +
         `🏆 <b>${league.name}</b>\n\n` +
         `🔵 <b>${homeName}</b>  ${hScore} - ${aScore}  <b>${awayName}</b> 🔴\n\n` +
-        `Chikamu chechipiri chatanga!`
+        `Second half action has resumed!`
       );
     }
   }
 
-  // ==========================================
-  // 5. UEFA / CUP EXTRA TIME (15/30 MIN)
-  // ==========================================
-  if (isInitialized && (detail.includes('extra') || shortDetail.includes('et'))) {
-    if (detail.includes('1st') && !prev.detail.includes('1st')) {
-      await sendTelegramAlert(null,
-        `⏳ <b>EXTRA TIME: 1ST HALF STARTED</b>\n` +
-        `━━━━━━━━━━━━━━━━━━━\n` +
-        `🏆 <b>${league.name}</b>\n` +
-        `🔵 <b>${homeName}</b>  ${hScore} - ${aScore}  <b>${awayName}</b> 🔴`
-      );
-    } else if (detail.includes('2nd') && !prev.detail.includes('2nd')) {
-      await sendTelegramAlert(null,
-        `▶️ <b>EXTRA TIME: 2ND HALF STARTED</b>\n` +
-        `━━━━━━━━━━━━━━━━━━━\n` +
-        `🏆 <b>${league.name}</b>\n` +
-        `🔵 <b>${homeName}</b>  ${hScore} - ${aScore}  <b>${awayName}</b> 🔴`
-      );
-    }
-  }
-
-  // ==========================================
-  // 6. PENALTY SHOOTOUT TRACKING (✅ ❌)
-  // ==========================================
-  if (isInitialized && (comp.shootout || detail.includes('shootout') || detail.includes('penalties'))) {
-    const curHomeShoot = home.shootoutScore || 0;
-    const curAwayShoot = away.shootoutScore || 0;
-
-    if (curHomeShoot !== prev.shootoutHome || curAwayShoot !== prev.shootoutAway) {
-      await sendTelegramAlert(null,
-        `🎯 <b>PENALTY SHOOTOUT UPDATE!</b>\n` +
-        `━━━━━━━━━━━━━━━━━━━\n` +
-        `🏆 <b>${league.name}</b>\n\n` +
-        `🔵 <b>${homeName}</b>: [${curHomeShoot}] ✅/❌\n` +
-        `🔴 <b>${awayName}</b>: [${curAwayShoot}] ✅/❌\n\n` +
-        `Score pamapenalties iri kuchinja!`
-      );
-    }
-  }
-
-  // ==========================================
-  // 7. IN-MATCH PENALTY SAVED / MISSED EVENTS
-  // ==========================================
-  if (state === 'in' && isInitialized) {
-    await checkKeyMatchEvents(league, matchId, homeName, awayName);
-  }
-
-  // ==========================================
-  // 8. FULL TIME (MATCH ENDED)
-  // ==========================================
+  // 5. FULL TIME / MATCH ENDED
   if (prev.state === 'in' && state === 'post' && isInitialized) {
     await sendTelegramAlert(null,
       `🏁 <b>FULL TIME / MATCH ENDED</b>\n` +
       `━━━━━━━━━━━━━━━━━━━\n` +
       `🏆 <b>${league.name}</b>\n\n` +
       `🔵 <b>${homeName}</b>  ${hScore} - ${aScore}  <b>${awayName}</b> 🔴\n\n` +
-      `Mutambo wapera zviri pamutemo!`
+      `The match has concluded!`
     );
   }
 
-  // Gadziridza cache yedu
   matchCache.set(matchId, {
     state,
     detail,
+    shortDetail,
     homeScore: hScore,
     awayScore: aScore,
-    period: ev.status?.period || 0,
     shootoutHome: home.shootoutScore || 0,
     shootoutAway: away.shootoutScore || 0
   });
 }
 
-// Function inotsvaga munhu we goal pakarepo
-async function fetchLatestScorer(leagueCode, matchId, hScore, aScore, homeName, awayName) {
+async function fetchLatestScorer(leagueCode, matchId) {
   try {
     const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueCode}/summary?event=${matchId}`;
     const res = await fetch(url);
-    if (!res.ok) return "🎯 Chibodzwa chapinda!";
+    if (!res.ok) return "🎯 Goal scored!";
     const data = await res.json();
-
     const keyEvents = data.keyEvents || [];
     const goalEvents = keyEvents.filter(e => {
       const t = (e.type?.text || '').toLowerCase();
@@ -232,46 +183,10 @@ async function fetchLatestScorer(leagueCode, matchId, hScore, aScore, homeName, 
       const lastGoal = goalEvents[goalEvents.length - 1];
       const scorer = lastGoal.participants?.[0]?.athlete?.displayName || 'Scorer';
       const clock = lastGoal.clock?.displayValue || '';
-      return `🎯 Munhu we Goal: <b>${scorer}</b> ${clock ? `(⏱️ ${clock})` : ''}`;
+      return `🎯 Goalscorer: <b>${scorer}</b> ${clock ? `(⏱️ ${clock})` : ''}`;
     }
   } catch (e) {}
-
-  return "🎯 Chibodzwa chapinda!";
-}
-
-// Function yekutarisa kana pane munhu atadza kurova Penalty (Saved / Missed)
-async function checkKeyMatchEvents(league, matchId, homeName, awayName) {
-  try {
-    const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${league.code}/summary?event=${matchId}`;
-    const res = await fetch(url);
-    if (!res.ok) return;
-    const data = await res.json();
-
-    const keyEvents = data.keyEvents || [];
-    for (const item of keyEvents) {
-      const eventKey = `${matchId}_${item.id || item.text}`;
-      if (processedEvents.has(eventKey)) continue;
-
-      const raw = (item.text || '').toLowerCase();
-
-      // Kana Penalty ikadzorwa kana kupotswa:
-      if (raw.includes('penalty') && (raw.includes('missed') || raw.includes('saved') || raw.includes('blocked'))) {
-        const taker = item.participants?.[0]?.athlete?.displayName || "Taker";
-        await sendTelegramAlert(null,
-          `❌ <b>PENALTY MISSED / SAVED!</b>\n` +
-          `━━━━━━━━━━━━━━━━━━━\n` +
-          `🏆 <b>${league.name}</b>\n` +
-          `⚽ <b>${homeName} vs ${awayName}</b>\n\n` +
-          `Player: <b>${taker}</b> haana kukwanisa kuisa penalty mumambure!\n` +
-          `Hapana goal rapinda.`
-        );
-        processedEvents.add(eventKey);
-        continue;
-      }
-
-      processedEvents.add(eventKey);
-    }
-  } catch (e) {}
+  return "🎯 Goal scored!";
 }
 
 module.exports = { checkLiveMatches };
