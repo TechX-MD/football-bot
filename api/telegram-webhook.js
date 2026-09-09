@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { handleTelegramUpdate } = require('../src/handlers/commandHandler');
 
 module.exports = async (req, res) => {
@@ -11,10 +12,9 @@ module.exports = async (req, res) => {
         await handleTelegramUpdate(body);
       }
     } catch (err) {
-      console.error('Webhook processing error:', err.message);
+      console.error('Webhook error:', err.message);
     }
     return res.status(200).send('OK');
   }
-
-  return res.status(200).send('Telegram Webhook Endpoint is Active & Ready!');
+  return res.status(200).send('Telegram Webhook is Active');
 };
