@@ -1,3 +1,6 @@
+// Nguva chaiyo ye Africa (CAT - Central Africa Time / Zimbabwe)
+const TIMEZONE = 'Africa/Harare';
+
 function adjustLiveMinute(rawDetail) {
   if (!rawDetail) return "LIVE 🔴";
   const str = String(rawDetail).trim();
@@ -15,25 +18,45 @@ function adjustLiveMinute(rawDetail) {
   return str.includes("'") ? str : `${str}'`;
 }
 
+// Kick-off time in CAT (e.g. 21:00 CAT)
 function formatMatchTimes(dateStr) {
   try {
     const d = new Date(dateStr);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const timeStr = d.toLocaleTimeString('en-GB', {
+      timeZone: TIMEZONE,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    return `${timeStr} CAT`;
   } catch {
     return dateStr;
   }
 }
 
+// Date yemu Africa (kuitira kuti pakarepo kana nguva yadarika pakati pehusiku mu Africa riite update)
 function getYYYYMMDD(offsetDays = 0) {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().slice(0, 10).replace(/-/g, '');
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  return formatter.format(d).replace(/-/g, '');
 }
 
 function getFormattedDateString(offsetDays = 0) {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
-  return d.toDateString();
+  return d.toLocaleDateString('en-GB', {
+    timeZone: TIMEZONE,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  }) + ' (CAT)';
 }
 
 function parseDateFromText(text) {
