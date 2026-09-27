@@ -7,6 +7,7 @@ module.exports = {
     { key: 'ligue1', name: '🇫🇷 Ligue 1', code: 'fra.1' },
     { key: 'cl', name: '🏆 UEFA Champions League', code: 'uefa.champions' },
     { key: 'uel', name: '🏆 UEFA Europa League', code: 'uefa.europa' },
+    { key: 'nations', name: '🇪🇺 UEFA Nations League', code: 'uefa.nations' },
     { key: 'championship', name: '🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship', code: 'eng.2' },
     { key: 'saudi', name: '🇸🇦 Saudi Pro League', code: 'sau.1' }
   ],
@@ -18,6 +19,10 @@ module.exports = {
     ligue1: ['fra.1', 'Ligue 1'],
     cl: ['uefa.champions', 'Champions League'],
     uel: ['uefa.europa', 'Europa League'],
+    nations: ['uefa.nations', 'UEFA Nations League'],
+    unl: ['uefa.nations', 'UEFA Nations League'],
+    'uefa nations league': ['uefa.nations', 'UEFA Nations League'],
+    'nations league': ['uefa.nations', 'UEFA Nations League'],
     saudi: ['sau.1', 'Saudi Pro League'],
     championship: ['eng.2', 'Championship']
   }
