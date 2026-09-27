@@ -15,7 +15,7 @@ async function handleTelegramUpdate(update) {
   if (lower === '/testchannel') {
     const channel = process.env.TELEGRAM_CHANNEL_ID;
     if (!channel) {
-      await sendTelegramAlert(chatId, "❌ <b>ERROR:</b> <code>TELEGRAM_CHANNEL_ID</code> is not set!");
+      await sendTelegramAlert(chatId, "❌ <b>ERROR:</b> <code>TELEGRAM_CHANNEL_ID</code> is not configured!");
       return;
     }
 
@@ -23,11 +23,11 @@ async function handleTelegramUpdate(update) {
       `📢 <b>TECH SPORT TV — CHANNEL TEST</b>\n` +
       `━━━━━━━━━━━━━━━━━━━\n\n` +
       `✅ <b>Connected Successfully!</b>\n` +
-      `Live football goal alerts, lineups & Nations League updates are active.`
+      `EPL, Champions League, Europa League, Carabao Cup & AFCON alerts are active.`
     );
 
     if (res && res.ok) {
-      await sendTelegramAlert(chatId, `✅ <b>SUCCESS!</b> Test message was posted to channel: <code>${channel}</code>`);
+      await sendTelegramAlert(chatId, `✅ <b>SUCCESS!</b> Test message was posted to your channel: <code>${channel}</code>`);
     } else {
       await sendTelegramAlert(chatId, `❌ <b>FAILED TO POST:</b> <code>${res?.description || 'Unknown error'}</code>`);
     }
@@ -38,9 +38,9 @@ async function handleTelegramUpdate(update) {
     await sendTelegramAlert(chatId,
       `⚽ <b>WELCOME TO TECH SPORT TV</b>\n` +
       `━━━━━━━━━━━━━━━━━━━\n\n` +
-      `🔥 Premier League, Champions League, UEFA Nations League & Europe's top leagues!\n` +
-      `⚡ Instant goals, official Starting XIs, VAR decisions & tables.\n\n` +
-      `Type <b>/help</b> to view commands.`
+      `🔥 Premier League, Champions League, Europa League, Carabao Cup, AFCON & UEFA Nations League!\n` +
+      `⚡ Live goals, 30-min confirmed Starting XIs, VAR alerts & standings.\n\n` +
+      `Type <b>/help</b> to see all commands.`
     );
     return;
   }
@@ -53,10 +53,14 @@ async function handleTelegramUpdate(update) {
       `📅 /today — Today's fixtures with Central Africa Time (CAT)\n` +
       `📅 /tomorrow — Tomorrow's fixtures (CAT)\n` +
       `📅 /fixtures 2026-10-15 — Matches by specific date (Calendar)\n` +
-      `📋 /lineup Portugal — Official Starting XI & Bench\n` +
-      `🏆 /table nations — UEFA Nations League Standings\n` +
-      `🏆 /table epl — Premier League Table (1-20)\n` +
-      `🏆 /table cl — UEFA Champions League\n` +
+      `📋 /lineup Arsenal — Official Starting XI & Bench\n\n` +
+      `🏆 <b>LEAGUE TABLES & STANDINGS:</b>\n` +
+      `• /table epl — Premier League (1-20)\n` +
+      `• /table cl — Champions League\n` +
+      `• /table uel — Europa League\n` +
+      `• /table afcon — Africa Cup of Nations\n` +
+      `• /table nations — UEFA Nations League\n` +
+      `• /table laliga, /table bundesliga, /table seriea\n\n` +
       `📢 /testchannel — Test channel alert\n\n` +
       `📺 <b>TECH SPORT TV</b>`
     );
@@ -66,7 +70,7 @@ async function handleTelegramUpdate(update) {
   if (lower.startsWith('/lineup')) {
     const query = text.replace(/^\/lineup/i, '').trim();
     if (!query) {
-      await sendTelegramAlert(chatId, "⚠️ Usage: <code>/lineup Portugal</code> or <code>/lineup Arsenal</code>");
+      await sendTelegramAlert(chatId, "⚠️ Usage: <code>/lineup Arsenal</code> or <code>/lineup Nigeria</code>");
       return;
     }
     const lineupMsg = await fetchMatchLineup(query);
@@ -100,7 +104,10 @@ async function handleTelegramUpdate(update) {
     const key = lower.replace(/^\/table/i, '').trim() || 'epl';
     const [code, name] = TABLE_MAP[key] || TABLE_MAP.epl;
     const res = await fetchRealLiveStandings(code, name);
-    await sendTelegramAlert(chatId, res || `❌ Table unavailable for ${name}.`);
+    await sendTelegramAlert(
+      chatId,
+      res || `❌ <b>TABLE UNAVAILABLE</b>\n\nCould not retrieve standings for ${name} (some knockout cups do not have group tables).`
+    );
     return;
   }
 }
