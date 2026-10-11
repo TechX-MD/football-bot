@@ -26,16 +26,11 @@ async function checkLiveMatches() {
   let liveCount = 0;
   let alertsSent = 0;
 
-  // Ultra-Fast: Tarisa ma leagues ese ari 9 kamwe chete (Parallel)
   const leaguePromises = ESPN_LEAGUES.map(async (league) => {
     try {
-      // _ts inobvisa cache ye ESPN kuti tiwane goal pakarepo richangonwika
       const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${league.code}/scoreboard?_ts=${Date.now()}`;
       const res = await fetch(url, {
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
-        }
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
       });
       if (!res.ok) return;
 
@@ -51,7 +46,6 @@ async function checkLiveMatches() {
   });
 
   await Promise.allSettled(leaguePromises);
-
   saveCache(cache);
   return { liveMatches: liveCount, alertsSent };
 }
@@ -70,6 +64,10 @@ async function processMatch(league, ev, cache) {
   const hScore = parseInt(home.score || '0', 10);
   const aScore = parseInt(away.score || '0', 10);
 
+  // Logos kubva pa ESPN
+  const homeLogo = home.team?.logo || null;
+  const awayLogo = away.team?.logo || null;
+
   const state = ev.status?.type?.state;
   const detail = (ev.status?.type?.detail || '').toLowerCase();
   const shortDetail = (ev.status?.type?.shortDetail || '').toLowerCase();
@@ -83,7 +81,13 @@ async function processMatch(league, ev, cache) {
       if (diffMins <= 45 && diffMins >= 10) {
         const lineupText = await getOfficialLineupForAlert(league.code, matchId);
         if (lineupText) {
-          await sendTelegramAlert(null, lineupText);
+          const bannerButtons = {
+            inline_keyboard: [
+              [{ text: `📋 ${homeName.toUpperCase()} vs ${awayName.toUpperCase()}`, callback_data: `lineup_${matchId}` }],
+              [{ text: `📺 TECH SPORT TV — OFFICIAL`, url: `https://t.me/techsporttv` }]
+            ]
+          };
+          await sendTelegramAlert(null, lineupText, { photo: homeLogo || awayLogo, reply_markup: bannerButtons });
           cache.postedLineups.push(matchId);
           return true;
         }
@@ -91,15 +95,9 @@ async function processMatch(league, ev, cache) {
     } catch (err) {}
   }
 
-  // FIRST SEEN: Chengeta mascores aripo pasina alert
+  // FIRST SEEN: Chengeta mascores aripo
   if (!cache.matches[matchId]) {
-    cache.matches[matchId] = {
-      state,
-      detail,
-      shortDetail,
-      homeScore: hScore,
-      awayScore: aScore
-    };
+    cache.matches[matchId] = { state, detail, shortDetail, homeScore: hScore, awayScore: aScore };
     return false;
   }
 
@@ -108,97 +106,144 @@ async function processMatch(league, ev, cache) {
 
   // 2. KICK-OFF ALERT
   if (prev.state === 'pre' && state === 'in') {
-    await sendTelegramAlert(null,
-      `🟢 <b>KICK-OFF! MATCH STARTED</b>\n` +
-      `━━━━━━━━━━━━━━━━━━━\n` +
-      `🏆 <b>${league.name}</b>\n\n` +
-      `⚽ <b>${homeName}</b> 0 - 0 <b>${awayName}</b>\n\n` +
-      `The match is officially underway!`
-    );
+    const text = 
+      `🟣━━━━━━━━━━━━━━━━━━━━🟣\n` +
+      `🏆 <b>${league.name.toUpperCase()}</b>\n` +
+      `🟣━━━━━━━━━━━━━━━━━━━━🟣\n\n` +
+      `🟢 <b>KICK-OFF! MATCH IS LIVE</b>\n\n` +
+      `🛡️ <b>${homeName}</b> vs <b>${awayName}</b>\n` +
+      `⏱️ Clock: <b>1'</b> | The match is officially underway!`;
+
+    const bannerButtons = {
+      inline_keyboard: [
+        [{ text: `🟣 ${homeName.toUpperCase()}  0 - 0  ${awayName.toUpperCase()} 🟢`, callback_data: `match_${matchId}` }]
+      ]
+    };
+
+    await sendTelegramAlert(null, text, { photo: homeLogo || awayLogo, reply_markup: bannerButtons });
     sentAlert = true;
   }
 
-  // 3. INSTANT GOAL ALERT (HIGH SPEED)
+  // 3. REAL GOAL ALERT (EPL STYLED BANNER)
   if (state === 'in') {
     if (hScore > prev.homeScore || aScore > prev.awayScore) {
-      // Tora munhu we goal nekukasika (max 1.5 seconds) kuti tisasare shure
       const scorerInfo = await fetchLatestScorerFast(league.code, matchId);
+      const isHomeScored = hScore > prev.homeScore;
+      const scoringLogo = isHomeScored ? homeLogo : awayLogo;
+      const clock = ev.status?.type?.shortDetail || 'LIVE 🔴';
 
-      await sendTelegramAlert(null,
-        `⚽ <b>GOOOOOOOAL!</b>\n` +
-        `━━━━━━━━━━━━━━━━━━━\n` +
-        `🏆 <b>${league.name}</b>\n\n` +
+      const text =
+        `🟣━━━━━━━━━━━━━━━━━━━━🟣\n` +
+        `🏆 <b>${league.name.toUpperCase()}</b>\n` +
+        `🟣━━━━━━━━━━━━━━━━━━━━🟣\n\n` +
+        `⚽ <b>GOOOOOOOAL!</b>\n\n` +
         `🔵 <b>${homeName}</b>  ${hScore} - ${aScore}  <b>${awayName}</b> 🔴\n\n` +
         `${scorerInfo}\n` +
-        `⏱️ Clock: <b>${ev.status?.type?.shortDetail || 'LIVE 🔴'}</b>`
-      );
+        `⏱️ Clock: <b>${clock}</b>`;
+
+      // BANNERS SEZVIYA ZVIRI PAMUFANANIDZO WAKO:
+      const bannerButtons = {
+        inline_keyboard: [
+          // Banner 1: Scoreline rine ma colour e EPL (Purple 🟣 & Neon Green 🟢)
+          [
+            { 
+              text: `🟣 ${homeName.toUpperCase()}  ${hScore} - ${aScore}  ${awayName.toUpperCase()} 🟢`, 
+              callback_data: `score_${matchId}` 
+            }
+          ],
+          // Banner 2: Scorer ne Nguva
+          [
+            { text: `⚽ ${isHomeScored ? homeName : awayName} GOAL`, callback_data: `team_${matchId}` },
+            { text: `⏱️ ${clock}`, callback_data: `time_${matchId}` }
+          ],
+          // Banner 3: Official Channel Banner
+          [
+            { text: `📺 TECH SPORT TV LIVE`, url: `https://t.me/techsporttv` }
+          ]
+        ]
+      };
+
+      await sendTelegramAlert(null, text, { photo: scoringLogo, reply_markup: bannerButtons });
       sentAlert = true;
     }
 
     // 4. VAR DISALLOWED GOAL
     if (hScore < prev.homeScore || aScore < prev.awayScore) {
-      await sendTelegramAlert(null,
+      const text =
         `🚫 <b>GOAL DISALLOWED / VAR OVERTURNED!</b>\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
         `🏆 <b>${league.name}</b>\n\n` +
-        `❌ Goal ruled out following a VAR check!\n\n` +
-        `Score returned to: <b>${homeName} ${hScore} - ${aScore} ${awayName}</b>`
-      );
+        `❌ Goal ruled out following a VAR review!\n` +
+        `Score returned to: <b>${homeName} ${hScore} - ${aScore} ${awayName}</b>`;
+
+      const bannerButtons = {
+        inline_keyboard: [
+          [{ text: `🚫 VAR: ${homeName.toUpperCase()} ${hScore} - ${aScore} ${awayName.toUpperCase()}`, callback_data: `var_${matchId}` }]
+        ]
+      };
+
+      await sendTelegramAlert(null, text, { reply_markup: bannerButtons });
       sentAlert = true;
     }
   }
 
-  // 5. HALF TIME & SECOND HALF
+  // 5. HALF TIME
   const isHTNow = detail.includes('half time') || shortDetail === 'ht' || detail === 'ht';
   const wasHT = (prev.detail || '').includes('half time') || prev.shortDetail === 'ht';
 
   if (isHTNow && !wasHT) {
-    await sendTelegramAlert(null,
+    const text =
       `⏸️ <b>HALF TIME WHISTLE</b>\n` +
       `━━━━━━━━━━━━━━━━━━━\n` +
       `🏆 <b>${league.name}</b>\n\n` +
       `🔵 <b>${homeName}</b>  ${hScore} - ${aScore}  <b>${awayName}</b> 🔴\n\n` +
-      `The first half has ended!`
-    );
+      `The first half has ended!`;
+
+    const bannerButtons = {
+      inline_keyboard: [
+        [{ text: `⏸️ HT: ${homeName.toUpperCase()} ${hScore} - ${aScore} ${awayName.toUpperCase()}`, callback_data: `ht_${matchId}` }]
+      ]
+    };
+
+    await sendTelegramAlert(null, text, { photo: homeLogo || awayLogo, reply_markup: bannerButtons });
     sentAlert = true;
   } else if (!isHTNow && wasHT && state === 'in') {
-    await sendTelegramAlert(null,
+    const text =
       `▶️ <b>SECOND HALF UNDERWAY</b>\n` +
       `━━━━━━━━━━━━━━━━━━━\n` +
-      `🏆 <b>${league.name}</b>\n\n` +
-      `🔵 <b>${homeName}</b>  ${hScore} - ${aScore}  <b>${awayName}</b> 🔴\n\n` +
-      `Second half action has resumed!`
-    );
+      `🔵 <b>${homeName}</b>  ${hScore} - ${aScore}  <b>${awayName}</b> 🔴`;
+
+    await sendTelegramAlert(null, text);
     sentAlert = true;
   }
 
-  // 6. FULL TIME / MATCH ENDED
+  // 6. FULL TIME
   if (prev.state === 'in' && state === 'post') {
-    await sendTelegramAlert(null,
+    const text =
       `🏁 <b>FULL TIME / MATCH ENDED</b>\n` +
       `━━━━━━━━━━━━━━━━━━━\n` +
       `🏆 <b>${league.name}</b>\n\n` +
       `🔵 <b>${homeName}</b>  ${hScore} - ${aScore}  <b>${awayName}</b> 🔴\n\n` +
-      `The match has concluded!`
-    );
+      `The match has concluded!`;
+
+    const bannerButtons = {
+      inline_keyboard: [
+        [{ text: `🏁 FT: ${homeName.toUpperCase()} ${hScore} - ${aScore} ${awayName.toUpperCase()}`, callback_data: `ft_${matchId}` }]
+      ]
+    };
+
+    await sendTelegramAlert(null, text, { photo: homeLogo || awayLogo, reply_markup: bannerButtons });
     sentAlert = true;
   }
 
-  cache.matches[matchId] = {
-    state,
-    detail,
-    shortDetail,
-    homeScore: hScore,
-    awayScore: aScore
-  };
-
+  cache.matches[matchId] = { state, detail, shortDetail, homeScore: hScore, awayScore: aScore };
   return sentAlert;
 }
 
 async function fetchLatestScorerFast(leagueCode, matchId) {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1800); // 1.8s timeout chete
+    const timeoutId = setTimeout(() => controller.abort(), 1800);
 
     const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueCode}/summary?event=${matchId}&_ts=${Date.now()}`;
     const res = await fetch(url, { signal: controller.signal });

@@ -1,18 +1,34 @@
-async function sendTelegramAlert(chatId, text) {
+async function sendTelegramAlert(chatId, text, options = {}) {
   const token = process.env.TELEGRAM_BOT_TOKEN || "";
   const channelId = process.env.TELEGRAM_CHANNEL_ID || "";
   const targetChat = chatId || channelId;
 
-  if (!token) {
-    console.error("❌ Telegram Token is missing in environment variables!");
-    return { ok: false, description: "TELEGRAM_BOT_TOKEN is missing" };
+  if (!token || !targetChat) return { ok: false };
+
+  const photoUrl = options.photo;
+  const replyMarkup = options.reply_markup;
+
+  // 1. KANA PANE PHOTO/LOGO: Yedza kutumira Photo Banner ine Caption
+  if (photoUrl) {
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: targetChat,
+          photo: photoUrl,
+          caption: text,
+          parse_mode: 'HTML',
+          reply_markup: replyMarkup
+        })
+      });
+      const data = await res.json();
+      if (data.ok) return data;
+      // Kana photo ikatadza (panoita pasingaiti), ichaenderera mberi ku text pasi
+    } catch (e) {}
   }
 
-  if (!targetChat) {
-    console.error("❌ Target Chat/Channel ID is missing!");
-    return { ok: false, description: "TELEGRAM_CHANNEL_ID is missing" };
-  }
-
+  // 2. KANA PASINA PHOTO KANA IKATADZA: Tumira se Message ine Banner Buttons
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
@@ -21,16 +37,12 @@ async function sendTelegramAlert(chatId, text) {
         chat_id: targetChat,
         text,
         parse_mode: 'HTML',
-        disable_web_page_preview: true
+        disable_web_page_preview: false,
+        reply_markup: replyMarkup
       })
     });
-    const data = await res.json();
-    if (!data.ok) {
-      console.error(`❌ Telegram Send Error (${targetChat}):`, data.description);
-    }
-    return data;
+    return await res.json();
   } catch (e) {
-    console.error("❌ Telegram send network error:", e.message);
     return { ok: false, description: e.message };
   }
 }
