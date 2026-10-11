@@ -1,7 +1,35 @@
 const { ESPN_LEAGUES } = require('../config/leagues');
 const { adjustLiveMinute, formatMatchTimes } = require('../utils/timeUtils');
 
-// Helper function inoburitsa ma groups ese kunyangwe akaunganidzwa mu sub-folders e ESPN
+// Helper function: Inovaka Table riri mu BHOKISI (sepa screenshot yako)
+function renderBoxTable(entries) {
+  let lines = [];
+  lines.push("┌───┬─────────────┬───┬───┬──┐");
+  lines.push("│ # │ TEAM        │ P │GD │PT│");
+  lines.push("├───┼─────────────┼───┼───┼──┤");
+
+  entries.forEach((item, index) => {
+    const rank = String(index + 1).padStart(2, ' ');
+    let name = item.team?.shortDisplayName || item.team?.name || 'Team';
+    if (name.length > 11) name = name.substring(0, 10) + '.';
+    name = name.padEnd(11, ' ');
+
+    const played = String(item.stats?.find(s => s.name === 'gamesPlayed')?.value ?? '0').padStart(2, ' ');
+    
+    let gd = String(item.stats?.find(s => s.name === 'pointDifferential')?.displayValue ?? '0');
+    if (!gd.startsWith('+') && !gd.startsWith('-') && gd !== '0') gd = '+' + gd;
+    gd = gd.padStart(3, ' ');
+    if (gd.length > 3) gd = gd.substring(0, 3);
+
+    const pts = String(item.stats?.find(s => s.name === 'points')?.value ?? '0').padStart(2, ' ');
+
+    lines.push(`│${rank} │ ${name} │${played} │${gd}│${pts}│`);
+  });
+
+  lines.push("└───┴─────────────┴───┴───┴──┘");
+  return `<pre>${lines.join("\n")}</pre>`;
+}
+
 function extractAllGroups(childrenList) {
   let groups = [];
   if (!Array.isArray(childrenList)) return groups;
@@ -20,6 +48,7 @@ function extractAllGroups(childrenList) {
   return groups;
 }
 
+// FIXTURES INE MA LEAGUE BANNERS ANE MA COLOURS AWO
 async function fetchRealFixturesForDate(dateStr, dateLabel, leagueFilter = null) {
   let fixturesText = `📅 <b>FIXTURES — ${dateLabel}</b>\n━━━━━━━━━━━━━━━━━━━\n\n`;
   let hasMatches = false;
@@ -39,7 +68,13 @@ async function fetchRealFixturesForDate(dateStr, dateLabel, leagueFilter = null)
       const matches = events.filter(ev => !seenIds.has(ev.id));
       if (matches.length > 0) {
         hasMatches = true;
-        fixturesText += `🏆 <b>${league.name}</b>\n`;
+
+        // Custom League Color Banner
+        const c1 = league.c1 || '🔵';
+        const c2 = league.c2 || '⚪';
+        fixturesText += `${c1}${c2}━━━━━━━━━━━━━━━━━━━━${c2}${c1}\n`;
+        fixturesText += `🏆 <b>${league.name.toUpperCase()}</b>\n`;
+        fixturesText += `${c1}${c2}━━━━━━━━━━━━━━━━━━━━${c2}${c1}\n\n`;
 
         matches.forEach(ev => {
           seenIds.add(ev.id);
@@ -58,19 +93,18 @@ async function fetchRealFixturesForDate(dateStr, dateLabel, leagueFilter = null)
           const statusDetail = ev.status?.type?.shortDetail || ev.status?.type?.detail || '';
           const timeFormatted = formatMatchTimes(ev.date);
 
-          let scoreDisplay;
           if (state === 'post') {
-            scoreDisplay = `<b>${homeScore} - ${awayScore}</b> 🏁 <b>${away}</b> (FT)`;
+            fixturesText += `┌ 🏁 <b>${home}</b>  ${homeScore} - ${awayScore}  <b>${away}</b>\n`;
+            fixturesText += `└ ⏱️ Full Time (FT)\n\n`;
           } else if (state === 'in') {
             const displayMin = adjustLiveMinute(statusDetail);
-            scoreDisplay = `<b>${homeScore} - ${awayScore}</b> 🔴 <b>${away}</b> (⏱️ ${displayMin})`;
+            fixturesText += `┌ 🔴 <b>${home}</b>  ${homeScore} - ${awayScore}  <b>${away}</b>\n`;
+            fixturesText += `└ ⏱️ LIVE (${displayMin})\n\n`;
           } else {
-            scoreDisplay = `vs 🔴 <b>${away}</b> (${timeFormatted})`;
+            fixturesText += `┌ ⚔️ <b>${home}</b> vs <b>${away}</b>\n`;
+            fixturesText += `└ ⏰ <b>${timeFormatted}</b>\n\n`;
           }
-
-          fixturesText += `• 🔵 <b>${home}</b> ${scoreDisplay}\n`;
         });
-        fixturesText += `\n`;
       }
     } catch (e) {}
   }
@@ -79,7 +113,7 @@ async function fetchRealFixturesForDate(dateStr, dateLabel, leagueFilter = null)
 }
 
 async function fetchRealLiveMatchesBulletin() {
-  let text = `🔴 <b>LIVE FOOTBALL SCORES</b>\n━━━━━━━━━━━━━━━━━━━\n\n`;
+  let text = `🔴 <b>LIVE FOOTBALL BULLETIN</b>\n━━━━━━━━━━━━━━━━━━━\n\n`;
   let liveFound = false;
 
   for (const league of ESPN_LEAGUES) {
@@ -87,20 +121,24 @@ async function fetchRealLiveMatchesBulletin() {
       const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${league.code}/scoreboard?_ts=${Date.now()}`;
       const res = await fetch(url, { headers: { 'Cache-Control': 'no-cache' } });
       const data = await res.json();
-
       const liveEvents = (data.events || []).filter(e => e.status?.type?.state === 'in');
 
       if (liveEvents.length > 0) {
         liveFound = true;
-        text += `🏆 <b>${league.name}</b>\n`;
+        const c1 = league.c1 || '🔵';
+        const c2 = league.c2 || '⚪';
+
+        text += `${c1}${c2}━━━━━━━━━━━━━━━━━━━━${c2}${c1}\n`;
+        text += `🏆 <b>${league.name.toUpperCase()}</b>\n\n`;
+
         liveEvents.forEach(ev => {
           const comp = ev.competitions?.[0];
           const home = comp.competitors.find(c => c.homeAway === 'home');
           const away = comp.competitors.find(c => c.homeAway === 'away');
           const clock = adjustLiveMinute(ev.status?.type?.shortDetail || ev.status?.type?.detail);
 
-          text += `⚽ <b>${home.team.name}</b> ${home.score} - ${away.score} <b>${away.team.name}</b>\n`;
-          text += `⏱️ Clock: <b>${clock}</b>\n\n`;
+          text += `┌ ⚽ <b>${home.team.name}</b>  ${home.score} - ${away.score}  <b>${away.team.name}</b>\n`;
+          text += `└ ⏱️ Status: <b>${clock}</b> | LIVE 🔴\n\n`;
         });
       }
     } catch (e) {}
@@ -109,8 +147,8 @@ async function fetchRealLiveMatchesBulletin() {
   return liveFound ? text : "🔴 <b>LIVE SCORES</b>\n\nNo matches currently underway.";
 }
 
-// REAL LIVE STANDINGS (Supports EPL, AFCON Tournament, AFCON Qualifiers & UEFA Groups)
-async function fetchRealLiveStandings(leagueCode, leagueName) {
+// BOXED TABLE ENGINE WITH LEAGUE COLORED BANNERS
+async function fetchRealLiveStandings(leagueCode, leagueName, c1 = '🔵', c2 = '⚪') {
   let activeCode = leagueCode;
   let activeName = leagueName;
 
@@ -121,60 +159,47 @@ async function fetchRealLiveStandings(leagueCode, leagueName) {
 
     let groups = extractAllGroups(data.children);
 
-    // KANA IRI AFCON ASINA TABLE RE FINALS: Tora AFCON Qualifiers pakarepo!
     if (activeCode === 'caf.nations' && groups.length === 0) {
       activeCode = 'caf.nations_qual';
       activeName = 'AFCON Qualifiers';
+      c1 = '🟢';
+      c2 = '🟡';
       url = `https://site.api.espn.com/apis/v2/sports/soccer/${activeCode}/standings`;
       res = await fetch(url);
       data = await res.json();
       groups = extractAllGroups(data.children);
     }
 
-    // 1. KANA IRI TOURNAMENT INE MA GROUPS (Senge AFCON, UEFA Nations League)
+    const bannerLine = `${c1}${c2}━━━━━━━━━━━━━━━━━━━━${c2}${c1}`;
+
+    // 1. KANA IRI TOURNAMENT INE MA GROUPS (AFCON, NATIONS LEAGUE)
     if (groups.length > 0) {
-      let text = `🏆 <b>${activeName.toUpperCase()} STANDINGS</b>\n━━━━━━━━━━━━━━━━━━━\n\n`;
+      let text = `${bannerLine}\n`;
+      text += `🏆 <b>${activeName.toUpperCase()} STANDINGS</b>\n`;
+      text += `${bannerLine}\n\n`;
 
       for (const group of groups) {
-        text += `📍 <b>${group.title}</b>\n`;
-        group.entries.forEach((item, index) => {
-          const rank = index + 1;
-          const team = item.team?.shortDisplayName || item.team?.name || 'Team';
-          const pts = item.stats?.find(s => s.name === 'points')?.value ?? '0';
-          const played = item.stats?.find(s => s.name === 'gamesPlayed')?.value ?? '0';
-          const diff = item.stats?.find(s => s.name === 'pointDifferential')?.displayValue ?? '0';
-
-          text += `${rank}. <b>${team}</b> — ${played}P | ${diff} GD | <b>${pts} pts</b>\n`;
-        });
+        text += `📍 <b>${group.title.toUpperCase()}</b>\n`;
+        text += renderBoxTable(group.entries);
         text += `\n`;
       }
       return text;
     }
 
-    // 2. KANA IRI LEAGUE YEMAZUVA OSE (Senge EPL 1 to 20, La Liga)
+    // 2. KANA IRI LEAGUE YAKAZARA (EPL 1-20, LALIGA, BUNDESLIGA)
     const entries = data.children?.[0]?.standings?.entries || [];
     if (entries.length > 0) {
-      let text = `🏆 <b>${activeName.toUpperCase()} TABLE (1-20)</b>\n━━━━━━━━━━━━━━━━━━━\n\n`;
-      entries.slice(0, 20).forEach((item, index) => {
-        const rank = index + 1;
-        const team = item.team?.shortDisplayName || item.team?.name || 'Team';
-        const pts = item.stats?.find(s => s.name === 'points')?.value ?? '0';
-        const played = item.stats?.find(s => s.name === 'gamesPlayed')?.value ?? '0';
-        const diff = item.stats?.find(s => s.name === 'pointDifferential')?.displayValue ?? '0';
+      let text = `${bannerLine}\n`;
+      text += `🏆 <b>${activeName.toUpperCase()} STANDINGS (1-20)</b>\n`;
+      text += `${bannerLine}\n\n`;
 
-        let prefix = `${rank}.`;
-        if (rank <= 4) prefix = `${rank}. 🔵`;
-        else if (rank === 5) prefix = `${rank}. 🟠`;
-        else if (rank >= 18) prefix = `${rank}. 🔴`;
-
-        text += `${prefix} <b>${team}</b> — ${played}P | ${diff} GD | <b>${pts} pts</b>\n`;
-      });
+      text += renderBoxTable(entries.slice(0, 20));
+      text += `\n<i>Legend: P = Played | GD = Goal Diff | PT = Points</i>\n`;
       return text;
     }
 
     return null;
   } catch (err) {
-    console.error("Standings error:", err.message);
     return null;
   }
 }
