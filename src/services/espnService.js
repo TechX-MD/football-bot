@@ -1,7 +1,6 @@
 const { ESPN_LEAGUES } = require('../config/leagues');
 const { adjustLiveMinute, formatMatchTimes } = require('../utils/timeUtils');
 
-// Helper function: Inovaka Table riri mu BHOKISI (sepa screenshot yako)
 function renderBoxTable(entries) {
   let lines = [];
   lines.push("┌───┬─────────────┬───┬───┬──┐");
@@ -15,14 +14,12 @@ function renderBoxTable(entries) {
     name = name.padEnd(11, ' ');
 
     const played = String(item.stats?.find(s => s.name === 'gamesPlayed')?.value ?? '0').padStart(2, ' ');
-    
     let gd = String(item.stats?.find(s => s.name === 'pointDifferential')?.displayValue ?? '0');
     if (!gd.startsWith('+') && !gd.startsWith('-') && gd !== '0') gd = '+' + gd;
     gd = gd.padStart(3, ' ');
     if (gd.length > 3) gd = gd.substring(0, 3);
 
     const pts = String(item.stats?.find(s => s.name === 'points')?.value ?? '0').padStart(2, ' ');
-
     lines.push(`│${rank} │ ${name} │${played} │${gd}│${pts}│`);
   });
 
@@ -48,11 +45,16 @@ function extractAllGroups(childrenList) {
   return groups;
 }
 
-// FIXTURES INE MA LEAGUE BANNERS ANE MA COLOURS AWO
+// FIXTURES: Dzinobudisa mameseji pamwe chete ne ma BUTTON BOXES sepa screenshot
 async function fetchRealFixturesForDate(dateStr, dateLabel, leagueFilter = null) {
-  let fixturesText = `📅 <b>FIXTURES — ${dateLabel}</b>\n━━━━━━━━━━━━━━━━━━━\n\n`;
+  let fixturesText = `📅 <b>TECH SPORT TV — FIXTURES</b>\n`;
+  fixturesText += `🗓️ <i>${dateLabel}</i>\n`;
+  fixturesText += `━━━━━━━━━━━━━━━━━━━\n\n`;
+  fixturesText += `Tap any match button below to view lineups & live details:\n`;
+
   let hasMatches = false;
   let seenIds = new Set();
+  let inlineKeyboard = [];
 
   const leaguesToFetch = leagueFilter
     ? ESPN_LEAGUES.filter(l => l.key === leagueFilter)
@@ -69,12 +71,13 @@ async function fetchRealFixturesForDate(dateStr, dateLabel, leagueFilter = null)
       if (matches.length > 0) {
         hasMatches = true;
 
-        // Custom League Color Banner
         const c1 = league.c1 || '🔵';
         const c2 = league.c2 || '⚪';
-        fixturesText += `${c1}${c2}━━━━━━━━━━━━━━━━━━━━${c2}${c1}\n`;
-        fixturesText += `🏆 <b>${league.name.toUpperCase()}</b>\n`;
-        fixturesText += `${c1}${c2}━━━━━━━━━━━━━━━━━━━━${c2}${c1}\n\n`;
+
+        // Header Button re League (Box guru repamusoro)
+        inlineKeyboard.push([
+          { text: `${c1} 🏆 ${league.name.toUpperCase()} ${c2}`, callback_data: `lg_${league.key}` }
+        ]);
 
         matches.forEach(ev => {
           seenIds.add(ev.id);
@@ -84,8 +87,8 @@ async function fetchRealFixturesForDate(dateStr, dateLabel, leagueFilter = null)
           const homeComp = comp.competitors.find(c => c.homeAway === 'home');
           const awayComp = comp.competitors.find(c => c.homeAway === 'away');
 
-          const home = homeComp?.team?.name || 'Home';
-          const away = awayComp?.team?.name || 'Away';
+          const home = homeComp?.team?.shortDisplayName || homeComp?.team?.name || 'Home';
+          const away = awayComp?.team?.shortDisplayName || awayComp?.team?.name || 'Away';
           const homeScore = homeComp?.score ?? '0';
           const awayScore = awayComp?.score ?? '0';
 
@@ -93,28 +96,59 @@ async function fetchRealFixturesForDate(dateStr, dateLabel, leagueFilter = null)
           const statusDetail = ev.status?.type?.shortDetail || ev.status?.type?.detail || '';
           const timeFormatted = formatMatchTimes(ev.date);
 
+          let buttonLabel = '';
+
+          // 1. Mutambo Wapera (FT)
           if (state === 'post') {
-            fixturesText += `┌ 🏁 <b>${home}</b>  ${homeScore} - ${awayScore}  <b>${away}</b>\n`;
-            fixturesText += `└ ⏱️ Full Time (FT)\n\n`;
-          } else if (state === 'in') {
+            buttonLabel = `🏁 ${home}  ${homeScore} - ${awayScore}  ${away} (FT)`;
+          } 
+          // 2. Mutambo Uri Kutambwa (LIVE)
+          else if (state === 'in') {
             const displayMin = adjustLiveMinute(statusDetail);
-            fixturesText += `┌ 🔴 <b>${home}</b>  ${homeScore} - ${awayScore}  <b>${away}</b>\n`;
-            fixturesText += `└ ⏱️ LIVE (${displayMin})\n\n`;
-          } else {
-            fixturesText += `┌ ⚔️ <b>${home}</b> vs <b>${away}</b>\n`;
-            fixturesText += `└ ⏰ <b>${timeFormatted}</b>\n\n`;
+            buttonLabel = `🔴 ${home}  ${homeScore} - ${awayScore}  ${away} (${displayMin})`;
+          } 
+          // 3. Mutambo Usati Watanga (Upcoming)
+          else {
+            buttonLabel = `⚔️ ${home} vs ${away} ⏰ ${timeFormatted}`;
           }
+
+          // BOX BHATANI REMUTAMBO WEGA WEGA (sepa screenshot)
+          inlineKeyboard.push([
+            { text: buttonLabel, callback_data: `m_${league.code}_${ev.id}` }
+          ]);
         });
       }
     } catch (e) {}
   }
 
-  return hasMatches ? fixturesText : `📅 <b>FIXTURES — ${dateLabel}</b>\n━━━━━━━━━━━━━━━━━━━\nNo fixtures found for this date.`;
+  // Bhatani rekupedzisira repasi
+  inlineKeyboard.push([
+    { text: `📺 TECH SPORT TV — OFFICIAL CHANNEL`, url: `https://t.me/techsporttv` }
+  ]);
+
+  if (!hasMatches) {
+    return {
+      text: `📅 <b>FIXTURES — ${dateLabel}</b>\n━━━━━━━━━━━━━━━━━━━\nNo matches scheduled for this date.`,
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: `📅 VIEW TODAY'S FIXTURES`, callback_data: `cmd_today` }],
+          [{ text: `📺 TECH SPORT TV CHANNEL`, url: `https://t.me/techsporttv` }]
+        ]
+      }
+    };
+  }
+
+  return {
+    text: fixturesText,
+    reply_markup: { inline_keyboard: inlineKeyboard }
+  };
 }
 
+// LIVE BULLETIN INE MA BUTTONS
 async function fetchRealLiveMatchesBulletin() {
   let text = `🔴 <b>LIVE FOOTBALL BULLETIN</b>\n━━━━━━━━━━━━━━━━━━━\n\n`;
   let liveFound = false;
+  let inlineKeyboard = [];
 
   for (const league of ESPN_LEAGUES) {
     try {
@@ -128,26 +162,37 @@ async function fetchRealLiveMatchesBulletin() {
         const c1 = league.c1 || '🔵';
         const c2 = league.c2 || '⚪';
 
-        text += `${c1}${c2}━━━━━━━━━━━━━━━━━━━━${c2}${c1}\n`;
-        text += `🏆 <b>${league.name.toUpperCase()}</b>\n\n`;
+        inlineKeyboard.push([
+          { text: `${c1} 🏆 ${league.name.toUpperCase()} ${c2}`, callback_data: `lg_${league.key}` }
+        ]);
 
         liveEvents.forEach(ev => {
           const comp = ev.competitions?.[0];
           const home = comp.competitors.find(c => c.homeAway === 'home');
           const away = comp.competitors.find(c => c.homeAway === 'away');
           const clock = adjustLiveMinute(ev.status?.type?.shortDetail || ev.status?.type?.detail);
+          const hName = home.team?.shortDisplayName || home.team?.name || 'Home';
+          const aName = away.team?.shortDisplayName || away.team?.name || 'Away';
 
-          text += `┌ ⚽ <b>${home.team.name}</b>  ${home.score} - ${away.score}  <b>${away.team.name}</b>\n`;
-          text += `└ ⏱️ Status: <b>${clock}</b> | LIVE 🔴\n\n`;
+          inlineKeyboard.push([
+            { text: `⚽ ${hName}  ${home.score} - ${away.score}  ${aName} (${clock})`, callback_data: `m_${league.code}_${ev.id}` }
+          ]);
         });
       }
     } catch (e) {}
   }
 
-  return liveFound ? text : "🔴 <b>LIVE SCORES</b>\n\nNo matches currently underway.";
+  inlineKeyboard.push([
+    { text: `🔄 REFRESH LIVE SCORES`, callback_data: `cmd_live` }
+  ]);
+
+  return {
+    text: liveFound ? text + `Tap any match to view real-time events & lineups:` : `🔴 <b>LIVE SCORES</b>\n\nNo matches currently live right now.`,
+    reply_markup: { inline_keyboard: inlineKeyboard }
+  };
 }
 
-// BOXED TABLE ENGINE WITH LEAGUE COLORED BANNERS
+// STANDINGS ENGINE
 async function fetchRealLiveStandings(leagueCode, leagueName, c1 = '🔵', c2 = '⚪') {
   let activeCode = leagueCode;
   let activeName = leagueName;
@@ -172,7 +217,6 @@ async function fetchRealLiveStandings(leagueCode, leagueName, c1 = '🔵', c2 = 
 
     const bannerLine = `${c1}${c2}━━━━━━━━━━━━━━━━━━━━${c2}${c1}`;
 
-    // 1. KANA IRI TOURNAMENT INE MA GROUPS (AFCON, NATIONS LEAGUE)
     if (groups.length > 0) {
       let text = `${bannerLine}\n`;
       text += `🏆 <b>${activeName.toUpperCase()} STANDINGS</b>\n`;
@@ -186,7 +230,6 @@ async function fetchRealLiveStandings(leagueCode, leagueName, c1 = '🔵', c2 = 
       return text;
     }
 
-    // 2. KANA IRI LEAGUE YAKAZARA (EPL 1-20, LALIGA, BUNDESLIGA)
     const entries = data.children?.[0]?.standings?.entries || [];
     if (entries.length > 0) {
       let text = `${bannerLine}\n`;
