@@ -45,12 +45,12 @@ function extractAllGroups(childrenList) {
   return groups;
 }
 
-// FIXTURES: Dzinobudisa mameseji pamwe chete ne ma BUTTON BOXES sepa screenshot
+// FIXTURES INE MA MATCH BOXES ANE LEAGUE COLORS NE RED CHANNEL BUTTON
 async function fetchRealFixturesForDate(dateStr, dateLabel, leagueFilter = null) {
   let fixturesText = `📅 <b>TECH SPORT TV — FIXTURES</b>\n`;
   fixturesText += `🗓️ <i>${dateLabel}</i>\n`;
   fixturesText += `━━━━━━━━━━━━━━━━━━━\n\n`;
-  fixturesText += `Tap any match button below to view lineups & live details:\n`;
+  fixturesText += `Tap any match box below to view lineups & live details:\n`;
 
   let hasMatches = false;
   let seenIds = new Set();
@@ -74,7 +74,7 @@ async function fetchRealFixturesForDate(dateStr, dateLabel, leagueFilter = null)
         const c1 = league.c1 || '🔵';
         const c2 = league.c2 || '⚪';
 
-        // Header Button re League (Box guru repamusoro)
+        // 1. League Header Box
         inlineKeyboard.push([
           { text: `${c1} 🏆 ${league.name.toUpperCase()} ${c2}`, callback_data: `lg_${league.key}` }
         ]);
@@ -98,21 +98,16 @@ async function fetchRealFixturesForDate(dateStr, dateLabel, leagueFilter = null)
 
           let buttonLabel = '';
 
-          // 1. Mutambo Wapera (FT)
+          // 2. MUTAMBO WEGA WEGA UNOTORA MAVARA E LEAGUE (c1 ne c2)
           if (state === 'post') {
-            buttonLabel = `🏁 ${home}  ${homeScore} - ${awayScore}  ${away} (FT)`;
-          } 
-          // 2. Mutambo Uri Kutambwa (LIVE)
-          else if (state === 'in') {
+            buttonLabel = `${c1} 🏁 ${home} ${homeScore} - ${awayScore} ${away} (FT) ${c2}`;
+          } else if (state === 'in') {
             const displayMin = adjustLiveMinute(statusDetail);
-            buttonLabel = `🔴 ${home}  ${homeScore} - ${awayScore}  ${away} (${displayMin})`;
-          } 
-          // 3. Mutambo Usati Watanga (Upcoming)
-          else {
-            buttonLabel = `⚔️ ${home} vs ${away} ⏰ ${timeFormatted}`;
+            buttonLabel = `🔴 ⚽ ${home} ${homeScore} - ${awayScore} ${away} (${displayMin}) 🔴`;
+          } else {
+            buttonLabel = `${c1} ${home} 🆚 ${away} ${c2} ⏰ ${timeFormatted}`;
           }
 
-          // BOX BHATANI REMUTAMBO WEGA WEGA (sepa screenshot)
           inlineKeyboard.push([
             { text: buttonLabel, callback_data: `m_${league.code}_${ev.id}` }
           ]);
@@ -121,18 +116,18 @@ async function fetchRealFixturesForDate(dateStr, dateLabel, leagueFilter = null)
     } catch (e) {}
   }
 
-  // Bhatani rekupedzisira repasi
+  // 3. OFFICIAL CHANNEL BUTTON — RED COLOR YAKAJASKA 🔴
   inlineKeyboard.push([
-    { text: `📺 TECH SPORT TV — OFFICIAL CHANNEL`, url: `https://t.me/techsporttv` }
+    { text: `🔴 📺 TECH SPORT TV — OFFICIAL CHANNEL 🔴`, url: `https://t.me/techsporttv` }
   ]);
 
   if (!hasMatches) {
     return {
-      text: `📅 <b>FIXTURES — ${dateLabel}</b>\n━━━━━━━━━━━━━━━━━━━\nNo matches scheduled for this date.`,
+      text: `📅 <b>FIXTURES — ${dateLabel}</b>\n━━━━━━━━━━━━━━━━━━━\nNo matches scheduled fhttps://t.me/footballgoal209or this date.`,
       reply_markup: {
         inline_keyboard: [
           [{ text: `📅 VIEW TODAY'S FIXTURES`, callback_data: `cmd_today` }],
-          [{ text: `📺 TECH SPORT TV CHANNEL`, url: `https://t.me/techsporttv` }]
+          [{ text: `🔴 📺 TECH SPORT TV CHANNEL 🔴`, url: `https://t.me/techsporttv` }]
         ]
       }
     };
@@ -144,7 +139,6 @@ async function fetchRealFixturesForDate(dateStr, dateLabel, leagueFilter = null)
   };
 }
 
-// LIVE BULLETIN INE MA BUTTONS
 async function fetchRealLiveMatchesBulletin() {
   let text = `🔴 <b>LIVE FOOTBALL BULLETIN</b>\n━━━━━━━━━━━━━━━━━━━\n\n`;
   let liveFound = false;
@@ -175,7 +169,7 @@ async function fetchRealLiveMatchesBulletin() {
           const aName = away.team?.shortDisplayName || away.team?.name || 'Away';
 
           inlineKeyboard.push([
-            { text: `⚽ ${hName}  ${home.score} - ${away.score}  ${aName} (${clock})`, callback_data: `m_${league.code}_${ev.id}` }
+            { text: `${c1} 🔴 ${hName} ${home.score} - ${away.score} ${aName} (${clock}) ${c2}`, callback_data: `m_${league.code}_${ev.id}` }
           ]);
         });
       }
@@ -183,7 +177,8 @@ async function fetchRealLiveMatchesBulletin() {
   }
 
   inlineKeyboard.push([
-    { text: `🔄 REFRESH LIVE SCORES`, callback_data: `cmd_live` }
+    { text: `🔄 REFRESH LIVE SCORES`, callback_data: `cmd_live` },
+    { text: `🔴 📺 TECH SPORT TV CHANNEL 🔴`, url: `https://t.me/techsporttv` }
   ]);
 
   return {
@@ -192,7 +187,6 @@ async function fetchRealLiveMatchesBulletin() {
   };
 }
 
-// STANDINGS ENGINE
 async function fetchRealLiveStandings(leagueCode, leagueName, c1 = '🔵', c2 = '⚪') {
   let activeCode = leagueCode;
   let activeName = leagueName;

@@ -5,13 +5,11 @@ const { getYYYYMMDD, getFormattedDateString, parseDateFromText } = require('../u
 const { TABLE_MAP } = require('../config/leagues');
 
 async function handleTelegramUpdate(update) {
-  // 1. KANA MUNHU ADZVANYA PABHATANI (CALLBACK QUERY)
   if (update.callback_query) {
     const cb = update.callback_query;
     const data = cb.data || '';
     const chatId = cb.message?.chat?.id;
 
-    // Pedza kusecha kwebhatani
     const token = process.env.TELEGRAM_BOT_TOKEN;
     if (token) {
       fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
@@ -57,7 +55,6 @@ async function handleTelegramUpdate(update) {
       return;
     }
 
-    // Kana adzvanya bhatani remutambo chairo (e.g. m_eng.1_700123)
     if (data.startsWith('m_')) {
       const parts = data.split('_');
       if (parts.length >= 3) {
@@ -69,7 +66,6 @@ async function handleTelegramUpdate(update) {
     return;
   }
 
-  // 2. MAMESEJI E TELEGRAM
   const msg = update.message || update.channel_post;
   if (!msg || !msg.text) return;
 
@@ -77,29 +73,24 @@ async function handleTelegramUpdate(update) {
   const text = msg.text.trim().replace(/@\w+/g, '');
   const lower = text.toLowerCase();
 
-  // /start: INOBATIDZA MAIN MENU YAKANYATSOITA SEPA SCREENSHOT YAKO
   if (lower === '/start' || lower === '/menu') {
     const mainMenuButtons = {
       inline_keyboard: [
-        // Row 1: Full-width button repamusoro
         [{ text: `🔴 ALL LIVE MATCHES 🔴`, callback_data: `cmd_live` }],
-        // Row 2: Mabox maviri akatarisana (sepa screenshot)
         [
           { text: `📅 TODAY'S FIXTURES`, callback_data: `cmd_today` },
           { text: `📅 TOMORROW`, callback_data: `cmd_tomorrow` }
         ],
-        // Row 3: Mabox maviri
         [
           { text: `🟣 PREMIER LEAGUE`, callback_data: `cmd_epl` },
           { text: `🔵 CHAMPIONS LEAGUE`, callback_data: `cmd_cl` }
         ],
-        // Row 4: Mabox maviri
         [
           { text: `🔴 LA LIGA`, callback_data: `cmd_laliga` },
           { text: `🌍 AFCON STANDINGS`, callback_data: `cmd_afcon` }
         ],
-        // Row 5: Full-width button repasi
-        [{ text: `📺 JOIN TECH SPORT TV CHANNEL`, url: `https://t.me/techsporttv` }]
+        // RED COLOR CHANNEL BUTTON
+        [{ text: `🔴 📺 JOIN TECH SPORT TV CHANNEL 🔴`, url: `https://t.me/techsporttv` }]
       ]
     };
 
